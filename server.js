@@ -17,7 +17,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import path from 'path';
-import fs from 'fs';
+import fs, { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,8 +36,17 @@ app.options('*', cors());
 app.use(express.json({ limit: '50mb' }));
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Health checks
-app.get('/',       (req, res) => res.json({ status: 'ok', service: 'WhatsApp Disparo Backend', connected: isConnected }));
+// ── Servir o frontend ────────────────────────
+const FRONTEND_PATH = path.join(__dirname, 'public', 'index.html');
+
+app.get('/', (req, res) => {
+  if (fs.existsSync(FRONTEND_PATH)) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(fs.readFileSync(FRONTEND_PATH, 'utf-8'));
+  } else {
+    res.json({ status: 'ok', service: 'WhatsApp Disparo Backend', connected: isConnected });
+  }
+});
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // ── Estado global ─────────────────────────────
@@ -105,9 +114,9 @@ async function conectarWhatsApp() {
 // ════════════════════════════════════════════════
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-function randomDelay() {
-  const min = parseInt(process.env.DELAY_MIN_MS) || 10000;
-  const max = parseInt(process.env.DELAY_MAX_MS) || 20000;
+function randomDelay(config = {}) {
+  const min = (config.delay_min_s || parseInt(process.env.DELAY_MIN_MS/1000) || 10) * 1000;
+  const max = (config.delay_max_s || parseInt(process.env.DELAY_MAX_MS/1000) || 20) * 1000;
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
@@ -122,17 +131,19 @@ function limparNumero(raw) {
   return n;
 }
 
-async function rodarDisparo(campanhaId) {
+async function rodarDisparo(campanhaId, config = {}) {
   if (!isConnected)  throw new Error('WhatsApp não conectado');
   if (isDisparando)  throw new Error('Disparo já em andamento');
   isDisparando = true; isPaused = false; campanhaAtiva = campanhaId;
   await supabase.from('campanhas').update({ status: 'ativa' }).eq('id', campanhaId);
-  console.log('🚀 Disparo iniciado:', campanhaId);
+  console.log('🚀 Disparo iniciado:', campanhaId, '| Config:', JSON.stringify(config));
 
   try {
     let batchCount = 0;
-    const BATCH_SIZE     = 25;
-    const BATCH_PAUSE_MS = 3 * 60 * 1000;
+    const BATCH_SIZE     = config.batch_size     || 25;
+    const BATCH_PAUSE_MS = (config.batch_pause_s || 180) * 1000;
+    const DAILY_LIMIT    = config.daily_limit    || 150;
+    let dailyCount = 0;
 
     while (true) {
       while (isPaused) { await sleep(1000); if (!isDisparando) break; }
@@ -144,6 +155,13 @@ async function rodarDisparo(campanhaId) {
 
       if (error) throw error;
       if (!leads || leads.length === 0) { console.log('✅ Todos os leads processados!'); break; }
+
+      // Daily limit check
+      if (DAILY_LIMIT > 0 && dailyCount >= DAILY_LIMIT) {
+        console.log(`⛔ Limite diário (${DAILY_LIMIT}) atingido.`);
+        await supabase.from('campanhas').update({ status: 'pausada', obs: 'Limite diário atingido' }).eq('id', campanhaId);
+        break;
+      }
 
       const lead   = leads[0];
       await supabase.from('leads').update({ status: 'enviando' }).eq('id', lead.id);
@@ -160,13 +178,14 @@ async function rodarDisparo(campanhaId) {
         await supabase.from('leads').update({ status: 'enviado', enviado_em: new Date().toISOString(), tentativas: (lead.tentativas||0)+1 }).eq('id', lead.id);
         await supabase.rpc('increment_enviados', { camp_id: campanhaId });
         batchCount++;
-        console.log(`✓ ${numero} (${batchCount})`);
+        dailyCount++;
+        console.log(`✓ ${numero} | lote:${batchCount} | hoje:${dailyCount}`);
 
         if (batchCount % BATCH_SIZE === 0) {
           console.log(`⏳ Pausa de lote...`);
           await sleep(BATCH_PAUSE_MS);
         } else {
-          await sleep(randomDelay());
+          await sleep(randomDelay(config));
         }
       } catch (e) {
         console.error('✗ Erro:', e.message);
@@ -255,8 +274,9 @@ app.get('/api/campanha/:id/stats', async (req, res) => {
 app.post('/api/campanha/:id/iniciar', async (req, res) => {
   if (!isConnected)  return res.status(400).json({ erro: 'WhatsApp não conectado' });
   if (isDisparando)  return res.status(400).json({ erro: 'Disparo já em andamento' });
-  rodarDisparo(req.params.id);
-  res.json({ ok: true, mensagem: 'Disparo iniciado!' });
+  const config = req.body || {};
+  rodarDisparo(req.params.id, config);
+  res.json({ ok: true, mensagem: 'Disparo iniciado!', config });
 });
 
 app.post('/api/disparo/pausar',  (req, res) => { isPaused = true;  res.json({ ok: true }); });
@@ -266,6 +286,40 @@ app.post('/api/disparo/parar',   async (req, res) => {
   if (campanhaAtiva) await supabase.from('campanhas').update({ status: 'pausada' }).eq('id', campanhaAtiva);
   campanhaAtiva = null;
   res.json({ ok: true });
+});
+
+// Feed em tempo real — últimos envios e pendentes
+app.get('/api/campanha/:id/feed', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 20;
+
+  const { data: recentes } = await supabase.from('leads')
+    .select('id,numero,nome,status,enviado_em,erro_msg,mensagem_final')
+    .eq('campanha_id', req.params.id)
+    .in('status', ['enviado','erro','invalido','enviando'])
+    .order('enviado_em', { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  const { count: pendentes } = await supabase.from('leads')
+    .select('*', { count: 'exact', head: true })
+    .eq('campanha_id', req.params.id).eq('status', 'pendente');
+
+  const { count: enviados } = await supabase.from('leads')
+    .select('*', { count: 'exact', head: true })
+    .eq('campanha_id', req.params.id).eq('status', 'enviado');
+
+  const { count: erros } = await supabase.from('leads')
+    .select('*', { count: 'exact', head: true })
+    .eq('campanha_id', req.params.id).eq('status', 'erro');
+
+  const { data: camp } = await supabase.from('campanhas')
+    .select('total_leads,status').eq('id', req.params.id).single();
+
+  res.json({
+    recentes: recentes || [],
+    contadores: { pendentes, enviados, erros, total: camp?.total_leads || 0 },
+    status: camp?.status || 'desconhecido',
+    disparando: isDisparando
+  });
 });
 
 app.get('/api/campanha/:id/exportar', async (req, res) => {
