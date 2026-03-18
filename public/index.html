@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disparo em Massa WhatsApp — Backend Pro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f4f8;--bg2:#fff;--border:#e2e8f0;--text:#1a202c;--text2:#64748b;--text3:#94a3b8;
+  --green:#25D366;--gl:#f0fdf4;--gb:#bbf7d0;
+  --amber:#f59e0b;--al:#fef3c7;--ab:#fde68a;
+  --red:#ef4444;--rl:#fee2e2;--rb:#fca5a5;
+  --blue:#3b82f6;--bl:#eff6ff;--bb:#bfdbfe;
+  --radius:12px;--rsm:8px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;padding:28px 16px}
+#app{max-width:880px;margin:0 auto}
+
+/* HEADER */
+.header{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.logo{width:52px;height:52px;background:var(--green);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 16px #25D36640}
+.logo svg{width:30px;height:30px;fill:white}
+h1{font-size:22px;font-weight:700}
+.accent{color:var(--green)}
+.pro-badge{font-size:11px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border-radius:20px;padding:3px 10px;font-weight:700;vertical-align:middle;margin-left:6px}
+.subtitle{font-size:13px;color:var(--text2);margin-top:3px}
+
+/* STATUS BAR */
+#statusBar{display:flex;align-items:center;gap:12px;background:var(--bg2);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 20px;margin-bottom:18px;box-shadow:0 2px 8px rgba(0,0,0,.06);transition:all .4s}
+#statusBar.conn{border-color:var(--gb);background:var(--gl)}
+.sdot{width:13px;height:13px;border-radius:50%;flex-shrink:0;transition:all .4s}
+.sdot.off{background:#ef4444;box-shadow:0 0 0 3px #fee2e2}
+.sdot.wait{background:#f59e0b;box-shadow:0 0 0 3px #fef3c7;animation:blink 1s ease-in-out infinite}
+.sdot.on{background:#25D366;box-shadow:0 0 0 3px #dcfce7}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+#stText{font-size:13px;font-weight:600;flex:1}
+#stSub{font-size:11px;color:var(--text2);margin-top:2px}
+
+/* BACKEND CONFIG */
+.backend-bar{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rsm);padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;gap:12px;font-size:13px}
+.backend-bar input{flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit;outline:none}
+.backend-bar input:focus{border-color:var(--green)}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.card-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sbadge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;border-width:1px;border-style:solid}
+.sbadge-green{background:var(--gl);color:#16a34a;border-color:var(--gb)}
+.sbadge-warn{background:var(--al);color:#92400e;border-color:var(--ab)}
+.sbadge-err{background:var(--rl);color:#991b1b;border-color:var(--rb)}
+.sbadge-blue{background:var(--bl);color:#1e40af;border-color:var(--bb)}
+
+/* QR */
+.qr-layout{display:grid;grid-template-columns:200px 1fr;gap:22px;align-items:start}
+@media(max-width:600px){.qr-layout{grid-template-columns:1fr}}
+.qr-frame{background:#fff;border:2px solid var(--border);border-radius:var(--rsm);width:200px;height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;transition:border-color .3s}
+.qr-frame.conn{border-color:var(--green);background:var(--gl)}
+.qr-frame img{width:170px;height:170px;border-radius:6px}
+.conn-ok{display:none;flex-direction:column;align-items:center;gap:10px;padding:20px;text-align:center}
+.chk{width:68px;height:68px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px #25D36650}
+.chk svg{width:34px;height:34px;fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+@keyframes pop{0%{transform:scale(0)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+.chk.pop{animation:pop .4s ease-out forwards}
+
+/* FORM */
+label.lbl{font-size:13px;color:var(--text2);display:block;margin-bottom:5px;font-weight:500}
+select,input[type=text],input[type=number],textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--rsm);font-size:13px;background:var(--bg);color:var(--text);font-family:inherit;outline:none;transition:border .15s}
+select:focus,input:focus,textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px #25D36615}
+textarea{resize:vertical;min-height:90px;line-height:1.6}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+.vars-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.var-chip{background:var(--gl);color:#16a34a;border:1px solid var(--gb);border-radius:20px;padding:3px 11px;font-size:12px;cursor:pointer;font-family:inherit}
+.var-chip:hover{background:#dcfce7}
+
+.upload-zone{border:2px dashed var(--border);border-radius:var(--rsm);padding:28px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg)}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--green);background:var(--gl)}
+.upload-zone input{display:none}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{background:var(--bg);border:1px solid var(--border);border-radius:var(--rsm);padding:14px 8px;text-align:center}
+.stat-num{font-size:26px;font-weight:700}
+.g{color:#25D366}.r{color:#ef4444}.a{color:#f59e0b}.b{color:#3b82f6}
+.stat-label{font-size:11px;color:var(--text2);margin-top:3px}
+
+.progress-wrap{margin:10px 0}
+.progress-bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:6px}
+.progress-fill{height:100%;background:var(--green);border-radius:4px;transition:width .4s}
+.progress-text{font-size:12px;color:var(--text2)}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:var(--rsm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;border:none}
+.btn-primary{background:var(--green);color:#fff;box-shadow:0 2px 8px #25D36630}
+.btn-primary:hover{background:#1db954;box-shadow:0 4px 14px #25D36650}
+.btn-primary:disabled{background:var(--border);color:var(--text3);cursor:not-allowed;box-shadow:none}
+.btn-secondary{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--bg)}
+.btn-danger{background:transparent;color:#ef4444;border:1px solid var(--rb)}
+.btn-danger:hover{background:var(--rl)}
+.btn-sm{padding:6px 13px;font-size:12px}
+.actions-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px}
+
+/* LOG */
+.log-area{background:#0f172a;border-radius:var(--rsm);padding:14px;height:170px;overflow-y:auto;font-size:11.5px;line-height:1.9;font-family:monospace;margin-top:14px;display:none}
+.lok{color:#4ade80}.lerr{color:#f87171}.linfo{color:#94a3b8}.lwarn{color:#fbbf24}
+
+/* TABLE */
+.table-wrap{max-height:170px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--rsm);margin-top:12px}
+table.lt{width:100%;border-collapse:collapse;font-size:12px}
+table.lt th{text-align:left;padding:7px 10px;color:var(--text2);background:var(--bg);border-bottom:1px solid var(--border);font-weight:500;position:sticky;top:0}
+table.lt td{padding:5px 10px;border-bottom:1px solid var(--border);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.steps-list{list-style:none;display:flex;flex-direction:column;gap:11px}
+.step-li{display:flex;gap:10px;align-items:flex-start}
+.snum{width:24px;height:24px;border-radius:50%;background:var(--gl);color:#16a34a;border:1px solid var(--gb);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:2px}
+
+.info-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--rsm);padding:12px 14px;font-size:12px;color:var(--text2);line-height:1.6}
+.info-box strong{color:var(--text)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinning{display:inline-block;width:14px;height:14px;border:2px solid rgba(37,211,102,.3);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite}
+
+footer{text-align:center;font-size:12px;color:var(--text3);margin-top:28px;padding-top:16px;border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+  </div>
+  <div>
+    <h1><span class="accent">WhatsApp</span> Disparo em Massa <span class="pro-badge">⚡ PRO Backend</span></h1>
+    <div class="subtitle">Node.js + Baileys + Supabase — envio real via API WhatsApp Web</div>
+  </div>
+</div>
+
+<!-- BACKEND CONFIG -->
+<div class="backend-bar">
+  <span style="font-size:13px;font-weight:600;color:var(--text2);white-space:nowrap">🔗 Backend:</span>
+  <input type="text" id="backendUrl" onchange="saveBackendUrl()" id="backendUrl" value="" placeholder="https://SEU-APP.up.railway.app">
+  <button class="btn btn-secondary btn-sm" onclick="testarBackend()">
+    <span id="testSpin" style="display:none" class="spinning"></span>
+    Testar conexão
+  </button>
+  <span id="backendStatus" style="font-size:12px;color:var(--text3)">—</span>
+</div>
+
+<div id="railwayTip" style="display:none;background:var(--bl);border:1px solid var(--bb);border-radius:var(--rsm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:#1e40af;line-height:1.6">
+  🚂 <strong>Railway detectado!</strong> Cole a URL do seu serviço Railway acima (ex: <code>https://whatsapp-disparo-production.up.railway.app</code>) e clique em "Testar conexão".
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusBar">
+  <div class="sdot off" id="sdot"></div>
+  <div style="flex:1">
+    <div id="stText" style="font-size:13px;font-weight:600">WhatsApp desconectado</div>
+    <div id="stSub">Inicie o backend e escaneie o QR Code abaixo</div>
+  </div>
+  <button class="btn btn-secondary btn-sm" onclick="refreshStatus()">
+    <span id="refreshSpin" style="display:none" class="spinning"></span>
+    Atualizar status
+  </button>
+</div>
+
+<!-- PASSO 0: Conexão -->
+<div class="card">
+  <div class="card-title">
+    <span class="sbadge sbadge-green">PASSO 0</span> Conectar WhatsApp
+    <span id="connBadge" class="sbadge sbadge-err">● Desconectado</span>
+  </div>
+  <div id="connPanel">
+    <div class="qr-layout">
+      <div>
+        <div class="qr-frame" id="qrFrame">
+          <div style="text-align:center;padding:16px">
+            <div style="font-size:28px;margin-bottom:8px">📱</div>
+            <div style="font-size:12px;color:var(--text2)">Inicie o backend<br>para gerar o QR</div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="carregarQR()">Carregar QR</button>
+          </div>
+        </div>
+        <!-- Sucesso -->
+        <div class="conn-ok" id="connOk">
+          <div class="chk" id="chkIcon">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:#16a34a">Conectado!</div>
+          <div id="connNumero" style="font-size:12px;color:var(--text2)"></div>
+          <button class="btn btn-secondary btn-sm" onclick="desconectar()" style="margin-top:4px">Trocar conta</button>
+        </div>
+      </div>
+      <div>
+        <ul class="steps-list" style="margin-bottom:16px">
+          <li class="step-li"><div class="snum">1</div><div style="font-size:13px;color:var(--text2);line-height:1.55">Instale e inicie o <strong>backend Node.js</strong> conforme o README</div></li>
+          <li class="step-li"><div class="snum">2</div><div style="font-size:13px;color:var(--text2);line-height:1.55">Clique em <strong>"Carregar QR"</strong> — o QR real do WhatsApp aparecerá ao lado</div></li>
+          <li class="step-li"><div class="snum">3</div><div style="font-size:13px;color:var(--text2);line-height:1.55">Abra o WhatsApp no celular → <strong>Aparelhos conectados</strong> → escaneie o QR</div></li>
+          <li class="step-li"><div class="snum">4</div><div style="font-size:13px;color:var(--text2);line-height:1.55">O status ficará <strong style="color:#16a34a">verde</strong> automaticamente</div></li>
+        </ul>
+        <div class="info-box">
+          <strong>💡 Por que backend?</strong><br>
+          O Baileys conecta diretamente ao WhatsApp Web via WebSocket — igual ao seu celular. A mensagem é enviada de verdade, sem precisar abrir janelas no navegador. Funciona 24h mesmo com o PC travado.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PASSO 1: Planilha -->
+<div class="card">
+  <div class="card-title"><span class="sbadge sbadge-green">PASSO 1</span> Importar planilha</div>
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fi').click()">
+    <input type="file" id="fi" accept=".xlsx,.xls,.csv" onchange="handleFile(event)">
+    <div style="font-size:34px;margin-bottom:8px">📊</div>
+    <p style="font-size:13px;color:var(--text2)"><strong style="color:var(--green)">Clique para selecionar</strong> ou arraste aqui</p>
+    <p style="font-size:12px;color:var(--text3);margin-top:4px">.xlsx, .xls ou .csv</p>
+  </div>
+  <div id="fileInfo" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin:14px 0 12px">
+      <span id="fName" style="font-size:13px;font-weight:600"></span>
+      <span id="fCount" class="sbadge sbadge-green"></span>
+      <button class="btn btn-secondary btn-sm" onclick="resetFile()">Trocar</button>
+    </div>
+    <div class="grid2">
+      <div><label class="lbl">Coluna do número (obrigatório)</label><select id="colPhone" onchange="updatePreview();updatePhoneDiag()"></select></div>
+      <div><label class="lbl">Coluna do nome (opcional)</label><select id="colName" onchange="updatePreview()"></select></div>
+    </div>
+    <div id="phoneDiag" style="display:none;margin-top:10px;padding:10px 12px;border-radius:var(--rsm);font-size:12px;border:1px solid var(--border)"></div>
+    <div class="table-wrap" id="tableWrap"></div>
+  </div>
+</div>
+
+<!-- PASSO 2: Mensagem -->
+<div class="card">
+  <div class="card-title"><span class="sbadge sbadge-green">PASSO 2</span> Mensagem</div>
+  <label class="lbl">Texto da mensagem</label>
+  <textarea id="msgText" rows="5" placeholder="Ex: Olá {nome}! Temos uma oferta especial para você 🎉" oninput="updatePreview()"></textarea>
+  <div style="margin-top:6px">
+    <label class="lbl" style="margin-bottom:6px">Variáveis disponíveis:</label>
+    <div class="vars-row" id="varsRow">
+      <span class="var-chip" onclick="insertVar('{nome}')">+ {nome}</span>
+      <span class="var-chip" onclick="insertVar('{numero}')">+ {numero}</span>
+    </div>
+  </div>
+  <div style="margin-top:14px">
+    <label class="lbl">Pré-visualização (1º contato):</label>
+    <div id="msgPreview" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--rsm);padding:13px;font-size:13px;line-height:1.7;min-height:52px;white-space:pre-wrap;word-break:break-word">—</div>
+  </div>
+</div>
+
+<!-- PASSO 3: Configurações de tempo -->
+<div class="card">
+  <div class="card-title"><span class="sbadge sbadge-green">PASSO 3</span> 🛡 Controle de tempo e proteção</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div>
+      <label class="lbl">Intervalo entre mensagens</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" id="delayMin" value="10" min="3" max="120" style="width:70px">
+        <span style="font-size:12px;color:var(--text2)">a</span>
+        <input type="number" id="delayMax" value="20" min="5" max="180" style="width:70px">
+        <span style="font-size:12px;color:var(--text2)">segundos</span>
+      </div>
+    </div>
+    <div>
+      <label class="lbl">Pausa após lote de</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" id="batchSize" value="25" min="5" max="100" style="width:70px">
+        <span style="font-size:12px;color:var(--text2)">envios →</span>
+        <input type="number" id="batchPause" value="180" min="30" max="900" style="width:70px">
+        <span style="font-size:12px;color:var(--text2)">seg</span>
+      </div>
+    </div>
+    <div>
+      <label class="lbl">Limite diário de envios</label>
+      <input type="number" id="dailyLimit" value="150" min="10" max="500">
+    </div>
+    <div>
+      <label class="lbl">Iniciar a partir do lead nº</label>
+      <input type="number" id="startFrom" value="1" min="1">
+    </div>
+  </div>
+
+  <!-- Medidor de risco -->
+  <div style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:5px">
+      <span>Nível de risco de bloqueio</span>
+      <span id="riskPct" style="font-weight:700">—</span>
+    </div>
+    <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+      <div id="riskFill" style="height:100%;border-radius:4px;transition:width .5s,background .5s;width:0%"></div>
+    </div>
+    <div id="riskTips" style="margin-top:8px;font-size:12px"></div>
+  </div>
+</div>
+
+<!-- PASSO 4: Disparar + Tempo Real -->
+<div class="card">
+  <div class="card-title"><span class="sbadge sbadge-green">PASSO 4</span> Disparar</div>
+
+  <div id="noConnWarn" style="background:var(--rl);border:1px solid var(--rb);border-radius:var(--rsm);padding:11px 14px;font-size:13px;color:#991b1b;margin-bottom:14px;display:flex;align-items:center;gap:9px">
+    <span>⚠️</span><span>Conecte o WhatsApp primeiro (Passo 0).</span>
+  </div>
+
+  <!-- Stats em tempo real -->
+  <div class="stats-grid">
+    <div class="stat"><div class="stat-num" id="stTotal">0</div><div class="stat-label">Total</div></div>
+    <div class="stat"><div class="stat-num g" id="stSent">0</div><div class="stat-label">✅ Enviados</div></div>
+    <div class="stat"><div class="stat-num r" id="stErr">0</div><div class="stat-label">❌ Erros</div></div>
+    <div class="stat"><div class="stat-num a" id="stPend">0</div><div class="stat-label">⏳ Pendentes</div></div>
+  </div>
+
+  <div class="progress-wrap" id="progWrap" style="display:none">
+    <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px">
+      <span class="progress-text" id="progText">0 / 0</span>
+      <span id="progEta" style="font-size:12px;color:var(--text2)"></span>
+    </div>
+  </div>
+
+  <div class="actions-row">
+    <button class="btn btn-primary" id="btnStart" onclick="iniciarDisparo()" disabled>
+      🚀 Iniciar Disparo Real
+    </button>
+    <button class="btn btn-secondary" id="btnPause" onclick="pausarDisparo()" style="display:none">⏸ Pausar</button>
+    <button class="btn btn-secondary" id="btnResume" onclick="retomarDisparo()" style="display:none">▶ Retomar</button>
+    <button class="btn btn-danger" id="btnStop" onclick="pararDisparo()" style="display:none">⏹ Parar</button>
+    <button class="btn btn-secondary" id="btnExport" onclick="exportarRelatorio()" style="display:none">📊 Relatório Excel</button>
+  </div>
+
+  <!-- Feed tempo real -->
+  <div id="feedWrap" style="display:none;margin-top:16px">
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px">
+      📡 Envios em tempo real
+      <span id="feedStatus" style="font-size:11px;font-weight:400;color:var(--text2)">atualizando...</span>
+    </div>
+    <div id="feedTable" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--rsm);overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--border)">
+            <th style="padding:7px 10px;text-align:left;color:var(--text2);font-weight:500">#</th>
+            <th style="padding:7px 10px;text-align:left;color:var(--text2);font-weight:500">Número</th>
+            <th style="padding:7px 10px;text-align:left;color:var(--text2);font-weight:500">Nome</th>
+            <th style="padding:7px 10px;text-align:left;color:var(--text2);font-weight:500">Status</th>
+            <th style="padding:7px 10px;text-align:left;color:var(--text2);font-weight:500">Horário</th>
+            <th style="padding:7px 10px;text-align:left;color:var(--text2);font-weight:500">Mensagem</th>
+          </tr>
+        </thead>
+        <tbody id="feedBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="log-area" id="logArea"></div>
+</div>
+
+<footer>Disparo via Baileys (WhatsApp Web API) + Supabase · Backend Node.js obrigatório</footer>
+</div>
+
+<script>
+/* ══════════════════════════════════
+   CONFIG & STATE
+══════════════════════════════════ */
+let API = () => document.getElementById('backendUrl').value.replace(/\/$/, '');
+
+// Auto-save and restore backend URL
+function saveBackendUrl() {
+  const url = document.getElementById('backendUrl').value;
+  if (url) localStorage.setItem('wa_backend_url', url);
+}
+function loadBackendUrl() {
+  const saved = localStorage.getItem('wa_backend_url') || window.location.origin;
+  document.getElementById('backendUrl').value = saved;
+}
+let leads = [], headers = [], campanhaId = null;
+let isConnected = false, isDisparando = false;
+let pollTimer = null, statsTimer = null;
+
+/* ══════════════════════════════════
+   BACKEND
+══════════════════════════════════ */
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API() + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function testarBackend() {
+  document.getElementById('testSpin').style.display = 'inline-block';
+  document.getElementById('backendStatus').textContent = 'Testando...';
+  try {
+    const data = await apiFetch('/api/status');
+    document.getElementById('backendStatus').textContent = '✅ Conectado ao backend!';
+    document.getElementById('backendStatus').style.color = '#16a34a';
+    aplicarStatus(data);
+    startPolling();
+  } catch (e) {
+    document.getElementById('backendStatus').textContent = '❌ Backend não encontrado. Inicie o servidor Node.js.';
+    document.getElementById('backendStatus').style.color = '#ef4444';
+  }
+  document.getElementById('testSpin').style.display = 'none';
+}
+
+async function refreshStatus() {
+  document.getElementById('refreshSpin').style.display = 'inline-block';
+  try {
+    const data = await apiFetch('/api/status');
+    aplicarStatus(data);
+  } catch (e) { addLog('Erro ao atualizar status: ' + e.message, 'err'); }
+  document.getElementById('refreshSpin').style.display = 'none';
+}
+
+function aplicarStatus(data) {
+  isConnected = data.conectado;
+  isDisparando = data.disparando;
+
+  const sb = document.getElementById('statusBar');
+  const dot = document.getElementById('sdot');
+  const badge = document.getElementById('connBadge');
+
+  if (isConnected) {
+    sb.classList.add('conn');
+    dot.className = 'sdot on';
+    document.getElementById('stText').textContent = '✅ WhatsApp conectado e enviando de verdade!';
+    document.getElementById('stSub').textContent = 'Número: ' + (data.sessao?.numero_conectado || '');
+    badge.className = 'sbadge sbadge-green'; badge.textContent = '● Conectado';
+    document.getElementById('connPanel').querySelector('.qr-layout').style.display = 'none';
+    const ok = document.getElementById('connOk');
+    ok.style.display = 'flex';
+    document.getElementById('connNumero').textContent = data.sessao?.numero_conectado ? '+' + data.sessao.numero_conectado : '';
+    document.getElementById('noConnWarn').style.display = 'none';
+    document.getElementById('qrFrame').classList.add('conn');
+  } else if (data.sessao?.status === 'aguardando_qr') {
+    dot.className = 'sdot wait';
+    document.getElementById('stText').textContent = 'Aguardando leitura do QR Code...';
+    badge.className = 'sbadge sbadge-warn'; badge.textContent = '◌ Aguardando QR';
+    carregarQR();
+  } else {
+    sb.classList.remove('conn');
+    dot.className = 'sdot off';
+    document.getElementById('stText').textContent = 'WhatsApp desconectado';
+    document.getElementById('stSub').textContent = 'Inicie o backend e escaneie o QR Code';
+    badge.className = 'sbadge sbadge-err'; badge.textContent = '● Desconectado';
+  }
+
+  updateStartBtn();
+  if (campanhaId) atualizarStats();
+}
+
+async function carregarQR() {
+  try {
+    const data = await apiFetch('/api/qrcode');
+    const frame = document.getElementById('qrFrame');
+    if (data.qr) {
+      frame.innerHTML = `<img src="${data.qr}" alt="QR Code WhatsApp">`;
+      addLog('📱 QR Code carregado — escaneie com o celular', 'info');
+    } else if (data.status === 'conectado') {
+      aplicarStatus({ conectado: true, disparando: false, sessao: {} });
+    } else {
+      frame.innerHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--text2)">QR ainda não disponível.<br>Aguarde o backend iniciar...</div>';
+      setTimeout(carregarQR, 3000);
+    }
+  } catch (e) {
+    document.getElementById('qrFrame').innerHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:#ef4444">Backend offline.<br>Inicie o servidor Node.js.</div>';
+  }
+}
+
+async function desconectar() {
+  await apiFetch('/api/desconectar', { method: 'POST' });
+  aplicarStatus({ conectado: false, disparando: false, sessao: {} });
+  document.getElementById('connOk').style.display = 'none';
+  document.getElementById('connPanel').querySelector('.qr-layout').style.display = 'grid';
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const data = await apiFetch('/api/status');
+      aplicarStatus(data);
+    } catch (e) {}
+  }, 4000);
+}
+
+/* ══════════════════════════════════
+   FILE HANDLING
+══════════════════════════════════ */
+const uz = document.getElementById('uploadZone');
+uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('drag'));
+uz.addEventListener('drop', e => { e.preventDefault(); uz.classList.remove('drag'); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); });
+
+function handleFile(e) { if (e.target.files[0]) processFile(e.target.files[0]); }
+
+function looksLikePhone(v) {
+  const d = String(v).replace(/\D/g, '');
+  return d.length >= 8 && d.length <= 15;
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+      if (!json || json.length < 2) { alert('Planilha vazia.'); return; }
+      headers = json[0].map(h => String(h).trim());
+      leads = json.slice(1).filter(r => r.some(c => String(c).trim() !== ''));
+
+      document.getElementById('fName').textContent = '📄 ' + file.name;
+      document.getElementById('fCount').textContent = leads.length.toLocaleString('pt-BR') + ' leads';
+      document.getElementById('fileInfo').style.display = 'block';
+      document.getElementById('uploadZone').style.display = 'none';
+
+      const pc = document.getElementById('colPhone'), nc = document.getElementById('colName');
+      pc.innerHTML = ''; nc.innerHTML = '<option value="">— Nenhuma —</option>';
+
+      // Auto-detect phone column by scanning data
+      const scores = headers.map((_, i) => leads.slice(0, 10).filter(r => looksLikePhone(r[i])).length);
+      let bestPhone = scores.indexOf(Math.max(...scores));
+
+      headers.forEach((h, i) => {
+        const sample = leads[0] ? String(leads[0][i]).slice(0, 14) : '';
+        pc.appendChild(new Option((h || 'Col ' + (i+1)) + ' [' + sample + ']', i));
+        nc.appendChild(new Option(h || 'Col ' + (i+1), i));
+        const l = h.toLowerCase();
+        if (l.includes('nome') || l.includes('name')) nc.value = i;
+      });
+
+      // Header keyword override
+      headers.forEach((h, i) => {
+        const l = h.toLowerCase();
+        if (l.includes('fone') || l.includes('phone') || l.includes('cel') || l.includes('numero') || l.includes('whatsapp') || l.includes('tel') || l.includes('zap') || l.includes('wpp')) bestPhone = i;
+      });
+      pc.value = bestPhone;
+
+      // Chips de variáveis
+      const vr = document.getElementById('varsRow');
+      vr.innerHTML = '<span class="var-chip" onclick="insertVar(\'{nome}\')">+ {nome}</span><span class="var-chip" onclick="insertVar(\'{numero}\')">+ {numero}</span>';
+      headers.forEach(h => {
+        if (!h) return;
+        const c = document.createElement('span');
+        c.className = 'var-chip'; c.textContent = '+ {' + h + '}';
+        c.onclick = () => insertVar('{' + h + '}'); vr.appendChild(c);
+      });
+
+      renderTable(); updatePreview(); updatePhoneDiag(); updateStartBtn();
+      document.getElementById('stTotal').textContent = leads.length.toLocaleString('pt-BR');
+    } catch (e) { alert('Erro ao ler: ' + e.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderTable() {
+  const w = document.getElementById('tableWrap');
+  let h = '<table class="lt"><thead><tr><th>#</th>';
+  headers.forEach(hd => { h += '<th>' + (hd || '?') + '</th>'; });
+  h += '</tr></thead><tbody>';
+  leads.slice(0, 6).forEach((row, i) => {
+    h += '<tr><td>' + (i+1) + '</td>';
+    headers.forEach((_, j) => { h += '<td title="' + (row[j]||'') + '">' + (row[j]||'') + '</td>'; });
+    h += '</tr>';
+  });
+  if (leads.length > 6) h += '<tr><td colspan="' + (headers.length+1) + '" style="text-align:center;color:var(--text3);font-style:italic;padding:8px">... + ' + (leads.length-6).toLocaleString('pt-BR') + ' leads</td></tr>';
+  h += '</tbody></table>';
+  w.innerHTML = h;
+}
+
+function resetFile() {
+  leads = []; headers = [];
+  document.getElementById('fi').value = '';
+  document.getElementById('fileInfo').style.display = 'none';
+  document.getElementById('uploadZone').style.display = 'block';
+  updateStartBtn();
+}
+
+function updatePhoneDiag() {
+  const idx = parseInt(document.getElementById('colPhone').value);
+  const panel = document.getElementById('phoneDiag');
+  if (!leads.length || isNaN(idx)) { panel.style.display = 'none'; return; }
+  const samples = leads.slice(0, 5);
+  const valid = samples.filter(r => looksLikePhone(r[idx])).length;
+  const total = samples.length;
+  let html = '<strong>Coluna "' + (headers[idx] || 'Col '+(idx+1)) + '"</strong> — ';
+  samples.forEach(r => {
+    const v = r[idx]; const ok = looksLikePhone(v);
+    html += '<span style="background:' + (ok?'#dcfce7':'#fee2e2') + ';color:' + (ok?'#166534':'#991b1b') + ';border-radius:4px;padding:1px 7px;margin-right:4px;font-size:11px">' + (v||'vazio') + (ok?' ✓':' ✗') + '</span>';
+  });
+  html += ' <strong style="color:' + (valid===total?'#16a34a':valid>0?'#d97706':'#dc2626') + '">' + valid + '/' + total + ' válidos</strong>';
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+  panel.style.background = valid===total?'var(--gl)':valid>0?'var(--al)':'var(--rl)';
+  panel.style.borderColor = valid===total?'var(--gb)':valid>0?'var(--ab)':'var(--rb)';
+}
+
+function insertVar(v) {
+  const ta = document.getElementById('msgText');
+  const s = ta.selectionStart;
+  ta.value = ta.value.slice(0, s) + v + ta.value.slice(ta.selectionEnd);
+  ta.selectionStart = ta.selectionEnd = s + v.length;
+  ta.focus(); updatePreview();
+}
+
+function updatePreview() {
+  const tmpl = document.getElementById('msgText').value;
+  if (!tmpl || !leads.length) { document.getElementById('msgPreview').textContent = '—'; return; }
+  let msg = tmpl;
+  const row = leads[0];
+  headers.forEach((h, i) => { if (h) msg = msg.split('{' + h + '}').join(row[i] || ''); });
+  const nc = document.getElementById('colName').value;
+  if (nc !== '') msg = msg.split('{nome}').join(row[parseInt(nc)] || '');
+  document.getElementById('msgPreview').textContent = msg;
+}
+
+function updateStartBtn() {
+  document.getElementById('btnStart').disabled = !(isConnected && leads.length > 0 && document.getElementById('msgText').value.trim());
+}
+
+/* ══════════════════════════════════
+   DISPARO
+══════════════════════════════════ */
+function calcRisk() {
+  const dmin  = parseInt(document.getElementById('delayMin').value)  || 10;
+  const batch = parseInt(document.getElementById('batchSize').value) || 25;
+  const pause = parseInt(document.getElementById('batchPause').value)|| 180;
+  const daily = parseInt(document.getElementById('dailyLimit').value)|| 150;
+  let score = 0; const tips = [];
+
+  if(dmin < 5)       { score+=30; tips.push({t:'bad', m:'Intervalo < 5s — risco alto de bloqueio'}); }
+  else if(dmin < 8)  { score+=15; tips.push({t:'warn',m:'Intervalo < 8s — risco moderado'}); }
+  else                             tips.push({t:'ok',  m:'Intervalo adequado ('+dmin+'s) ✓'});
+
+  if(batch > 50)     { score+=25; tips.push({t:'warn',m:'Lote > 50 — considere ≤ 30'}); }
+  else if(batch > 30){ score+=10; tips.push({t:'warn',m:'Lote '+batch+' — considere ≤ 30'}); }
+  else                             tips.push({t:'ok',  m:'Tamanho de lote seguro ('+batch+') ✓'});
+
+  if(pause < 60)     { score+=20; tips.push({t:'bad', m:'Pausa < 60s entre lotes'}); }
+  else if(pause<120) { score+=10; tips.push({t:'warn',m:'Pausa '+pause+'s — recomendado ≥ 120s'}); }
+  else                             tips.push({t:'ok',  m:'Pausa entre lotes adequada ('+pause+'s) ✓'});
+
+  if(daily > 300)    { score+=25; tips.push({t:'bad', m:'Limite '+daily+'/dia — risco de ban'}); }
+  else if(daily>200) { score+=10; tips.push({t:'warn',m:'Limite '+daily+'/dia — máximo recomendado 200'}); }
+  else                             tips.push({t:'ok',  m:'Limite diário seguro ('+daily+') ✓'});
+
+  score = Math.min(score, 100);
+  document.getElementById('riskFill').style.cssText = 'height:100%;border-radius:4px;transition:width .5s,background .5s;width:'+score+'%;background:'+(score<30?'#25D366':score<60?'#f59e0b':'#ef4444');
+  const rp = document.getElementById('riskPct');
+  rp.textContent = score<30?'🟢 Baixo ('+score+'%)':score<60?'🟡 Moderado ('+score+'%)':'🔴 Alto ('+score+'%)';
+  rp.style.color  = score<30?'#16a34a':score<60?'#d97706':'#ef4444';
+
+  const colors = {ok:'#16a34a', warn:'#d97706', bad:'#dc2626'};
+  const bgs    = {ok:'#f0fdf4', warn:'#fef3c7', bad:'#fee2e2'};
+  document.getElementById('riskTips').innerHTML = tips.map(t =>
+    `<div style="display:flex;align-items:flex-start;gap:7px;margin-bottom:4px">
+      <span style="background:${bgs[t.t]};color:${colors[t.t]};border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;margin-top:1px">${t.t==='ok'?'✓':t.t==='warn'?'!':'✗'}</span>
+      <span style="color:var(--text2)">${t.m}</span>
+    </div>`
+  ).join('');
+}
+
+// Attach risk calc to timing inputs
+['delayMin','delayMax','batchSize','batchPause','dailyLimit'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', calcRisk);
+});
+setTimeout(calcRisk, 500);
+
+let feedTimer = null;
+let disparoStart = null;
+
+async function iniciarDisparo() {
+  if (!isConnected) { alert('Conecte o WhatsApp primeiro.'); return; }
+  if (!leads.length) { alert('Importe uma planilha.'); return; }
+  const msg = document.getElementById('msgText').value.trim();
+  if (!msg) { alert('Escreva a mensagem.'); return; }
+
+  try {
+    addLog('📤 Enviando planilha para o backend...', 'info');
+    const formData = new FormData();
+    const phoneIdx = document.getElementById('colPhone').value;
+    const nameIdx  = document.getElementById('colName').value;
+
+    const ws  = XLSX.utils.aoa_to_sheet([headers, ...leads]);
+    const wb  = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    formData.append('planilha',     blob, 'leads.xlsx');
+    formData.append('nome',         'Campanha ' + new Date().toLocaleString('pt-BR'));
+    formData.append('mensagem',     msg);
+    formData.append('colunaNumero', phoneIdx);
+    formData.append('colunaNome',   nameIdx || '');
+
+    const res = await fetch(API() + '/api/campanha/criar', { method: 'POST', body: formData });
+    if (!res.ok) throw new Error('Erro ao criar campanha: HTTP ' + res.status);
+    const data = await res.json();
+    campanhaId = data.campanhaId;
+    addLog('✅ Campanha criada! ' + data.total.toLocaleString('pt-BR') + ' leads na fila', 'ok');
+
+    // Configurações de tempo
+    const config = {
+      delay_min_s:   parseInt(document.getElementById('delayMin').value)   || 10,
+      delay_max_s:   parseInt(document.getElementById('delayMax').value)   || 20,
+      batch_size:    parseInt(document.getElementById('batchSize').value)  || 25,
+      batch_pause_s: parseInt(document.getElementById('batchPause').value) || 180,
+      daily_limit:   parseInt(document.getElementById('dailyLimit').value) || 150,
+    };
+    addLog('⚙ Config: '+config.delay_min_s+'–'+config.delay_max_s+'s | lote:'+config.batch_size+' | pausa:'+config.batch_pause_s+'s | diário:'+config.daily_limit, 'info');
+
+    await apiFetch('/api/campanha/' + campanhaId + '/iniciar', {
+      method: 'POST',
+      body: JSON.stringify(config)
+    });
+    addLog('🚀 Disparo iniciado no backend!', 'ok');
+    disparoStart = Date.now();
+
+    document.getElementById('btnStart').style.display = 'none';
+    document.getElementById('btnPause').style.display = 'inline-flex';
+    document.getElementById('btnStop').style.display  = 'inline-flex';
+    document.getElementById('feedWrap').style.display = 'block';
+    document.getElementById('progWrap').style.display = 'block';
+
+    if (statsTimer) clearInterval(statsTimer);
+    if (feedTimer)  clearInterval(feedTimer);
+    statsTimer = setInterval(atualizarFeed, 2500);
+
+  } catch (e) {
+    addLog('❌ Erro: ' + e.message, 'err');
+  }
+}
+
+const statusIcon  = { enviado:'✅', erro:'❌', invalido:'⚠️', enviando:'⌛', pendente:'⏳' };
+const statusColor = { enviado:'#16a34a', erro:'#dc2626', invalido:'#d97706', enviando:'#3b82f6', pendente:'#94a3b8' };
+
+async function atualizarFeed() {
+  if (!campanhaId) return;
+  try {
+    const data = await apiFetch('/api/campanha/' + campanhaId + '/feed?limit=25');
+    const { contadores, recentes, status, disparando } = data;
+
+    // Atualizar contadores
+    const total    = contadores.total    || 0;
+    const enviados = contadores.enviados || 0;
+    const erros    = contadores.erros    || 0;
+    const pend     = contadores.pendentes|| 0;
+
+    document.getElementById('stTotal').textContent = total.toLocaleString('pt-BR');
+    document.getElementById('stSent').textContent  = enviados.toLocaleString('pt-BR');
+    document.getElementById('stErr').textContent   = erros.toLocaleString('pt-BR');
+    document.getElementById('stPend').textContent  = pend.toLocaleString('pt-BR');
+
+    // Progress bar + ETA
+    if (total > 0) {
+      const pct = Math.round((enviados / total) * 100);
+      document.getElementById('progFill').style.width = pct + '%';
+      document.getElementById('progText').textContent = enviados.toLocaleString('pt-BR') + ' / ' + total.toLocaleString('pt-BR') + ' (' + pct + '%)';
+
+      // ETA estimado
+      if (disparoStart && enviados > 0) {
+        const elapsed   = (Date.now() - disparoStart) / 1000;
+        const rate      = enviados / elapsed; // msgs/s
+        const remaining = pend || (total - enviados);
+        if (rate > 0 && remaining > 0) {
+          const etaSec = remaining / rate;
+          const etaMin = Math.round(etaSec / 60);
+          const etaHr  = Math.floor(etaMin / 60);
+          const etaLabel = etaHr > 0 ? etaHr+'h '+(etaMin%60)+'min' : etaMin+'min';
+          document.getElementById('progEta').textContent = '⏱ ETA: ~' + etaLabel;
+        }
+      }
+    }
+
+    // Feed de mensagens
+    const tbody = document.getElementById('feedBody');
+    if (recentes && recentes.length > 0) {
+      tbody.innerHTML = recentes.map((r, i) => {
+        const hora = r.enviado_em ? new Date(r.enviado_em).toLocaleTimeString('pt-BR') : '—';
+        const msgShort = (r.mensagem_final || '').slice(0, 50) + ((r.mensagem_final||'').length > 50 ? '…' : '');
+        const cor  = statusColor[r.status] || '#94a3b8';
+        const icon = statusIcon[r.status]  || '?';
+        return `<tr style="border-bottom:1px solid var(--border);${i===0?'background:var(--gl)':''}">
+          <td style="padding:6px 10px;color:var(--text3);font-size:11px">${i+1}</td>
+          <td style="padding:6px 10px;font-weight:500">${r.numero}</td>
+          <td style="padding:6px 10px;color:var(--text2);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.nome||'—'}</td>
+          <td style="padding:6px 10px;white-space:nowrap"><span style="color:${cor};font-weight:600">${icon} ${r.status}</span>${r.erro_msg?'<br><span style="font-size:10px;color:#dc2626">'+r.erro_msg.slice(0,40)+'</span>':''}</td>
+          <td style="padding:6px 10px;color:var(--text2);font-size:11px;white-space:nowrap">${hora}</td>
+          <td style="padding:6px 10px;color:var(--text2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${(r.mensagem_final||'').replace(/"/g,'')}">${msgShort}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    document.getElementById('feedStatus').textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR');
+
+    // Concluído
+    if (status === 'concluida' || status === 'pausada') {
+      addLog('✅ Campanha ' + status + '! Enviados: ' + enviados + ' | Erros: ' + erros, 'ok');
+      clearInterval(statsTimer);
+      document.getElementById('btnPause').style.display  = 'none';
+      document.getElementById('btnResume').style.display = 'none';
+      document.getElementById('btnStop').style.display   = 'none';
+      document.getElementById('btnStart').style.display  = 'inline-flex';
+      document.getElementById('btnExport').style.display = 'inline-flex';
+      document.getElementById('btnStart').textContent    = '🔄 Nova campanha';
+    }
+  } catch (e) { document.getElementById('feedStatus').textContent = 'erro ao atualizar'; }
+}
+
+async function pausarDisparo() {
+  await apiFetch('/api/disparo/pausar', { method: 'POST' });
+  document.getElementById('btnPause').style.display = 'none';
+  document.getElementById('btnResume').style.display = 'inline-flex';
+  addLog('⏸ Disparo pausado.', 'warn');
+}
+
+async function retomarDisparo() {
+  await apiFetch('/api/disparo/retomar', { method: 'POST' });
+  document.getElementById('btnPause').style.display = 'inline-flex';
+  document.getElementById('btnResume').style.display = 'none';
+  addLog('▶ Disparo retomado.', 'ok');
+}
+
+async function pararDisparo() {
+  await apiFetch('/api/disparo/parar', { method: 'POST' });
+  clearInterval(statsTimer);
+  document.getElementById('btnPause').style.display = 'none';
+  document.getElementById('btnResume').style.display = 'none';
+  document.getElementById('btnStop').style.display = 'none';
+  document.getElementById('btnStart').style.display = 'inline-flex';
+  document.getElementById('btnExport').style.display = 'inline-flex';
+  addLog('⏹ Disparo parado.', 'err');
+}
+
+async function exportarRelatorio() {
+  if (!campanhaId) return;
+  window.open(API() + '/api/campanha/' + campanhaId + '/exportar', '_blank');
+}
+
+/* LOG */
+function addLog(msg, type = 'info') {
+  const log = document.getElementById('logArea');
+  log.style.display = 'block';
+  const line = document.createElement('div');
+  line.className = 'l' + type;
+  line.textContent = '[' + new Date().toLocaleTimeString('pt-BR') + '] ' + msg;
+  log.appendChild(line); log.scrollTop = log.scrollHeight;
+}
+
+document.getElementById('msgText').addEventListener('input', updateStartBtn);
+
+// Auto-load saved URL and test connection on startup
+window.addEventListener('load', () => {
+  loadBackendUrl();
+  setTimeout(testarBackend, 800);
+});
+</script>
+</body>
+</html>
