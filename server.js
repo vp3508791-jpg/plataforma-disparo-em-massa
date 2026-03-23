@@ -14,6 +14,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  Browsers,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import path from 'path';
@@ -87,9 +88,11 @@ async function conectarSlot(slotId) {
   slot.sock = makeWASocket({
     version, logger, auth: state,
     printQRInTerminal: false,
-    browser: [`Disparo-Slot${slotId}`, 'Chrome', '120.0.0'],
+    browser: Browsers.macOS('Desktop'),
     generateHighQualityLinkPreview: false,
     syncFullHistory: false,
+    markOnlineOnConnect: false,
+    getMessage: async () => ({ conversation: '' }),
   });
 
   slot.sock.ev.on('creds.update', saveCreds);
@@ -154,6 +157,14 @@ function randomDelay(config = {}) {
   const min = (config.delay_min_s || 10) * 1000;
   const max = (config.delay_max_s || 20) * 1000;
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// Caracteres invisíveis Unicode para variar cada mensagem
+const INVISIBLES = ['\u200B','\u200C','\u200D','\uFEFF'];
+function variarMensagem(texto) {
+  const char = INVISIBLES[Math.floor(Math.random() * INVISIBLES.length)];
+  const pos  = Math.floor(Math.random() * (texto.length + 1));
+  return texto.slice(0, pos) + char + texto.slice(pos);
 }
 
 function limparNumero(raw) {
@@ -226,7 +237,7 @@ async function rodarDisparo(slotId, campanhaId, config = {}) {
       }
 
       try {
-        await slot.sock.sendMessage(numero + '@s.whatsapp.net', { text: lead.mensagem_final || '' });
+        await slot.sock.sendMessage(numero + '@s.whatsapp.net', { text: variarMensagem(lead.mensagem_final || '') });
         await supabase.from('leads').update({
           status: 'enviado',
           enviado_em: new Date().toISOString(),

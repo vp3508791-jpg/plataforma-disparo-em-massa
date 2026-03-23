@@ -207,9 +207,9 @@ footer{text-align:center;font-size:12px;color:var(--text3);margin-top:24px;paddi
     <div>
       <label class="lbl">Intervalo entre mensagens</label>
       <div style="display:flex;align-items:center;gap:8px">
-        <input type="number" id="delayMin" value="61" min="30" max="300" style="width:68px" oninput="calcRisk()">
+        <input type="number" id="delayMin" value="10" min="3" max="120" style="width:68px" oninput="calcRisk()">
         <span style="font-size:12px;color:var(--text2)">a</span>
-        <input type="number" id="delayMax" value="78" min="40" max="600" style="width:68px" oninput="calcRisk()">
+        <input type="number" id="delayMax" value="20" min="5" max="180" style="width:68px" oninput="calcRisk()">
         <span style="font-size:12px;color:var(--text2)">seg</span>
       </div>
     </div>
@@ -347,7 +347,11 @@ async function req(path, opts = {}) {
     headers: { 'Content-Type': 'application/json' },
     ...opts
   });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
+  if (!r.ok) {
+    let detalhe = '';
+    try { const j = await r.json(); detalhe = j.erro || j.message || ''; } catch(_) {}
+    throw new Error('HTTP ' + r.status + (detalhe ? ' — ' + detalhe : ''));
+  }
   return r.json();
 }
 
@@ -601,14 +605,14 @@ function checkStart() {
 
 /* ════════════════════ RISCO ════════════════════ */
 function calcRisk() {
-  const dmin=parseInt(document.getElementById('delayMin').value)||61;
+  const dmin=parseInt(document.getElementById('delayMin').value)||10;
   const batch=parseInt(document.getElementById('batchSize').value)||25;
   const pause=parseInt(document.getElementById('batchPause').value)||180;
   const daily=parseInt(document.getElementById('dailyLimit').value)||150;
   let score=0; const tips=[];
-  if(dmin<15){score+=30;tips.push({t:'bad',m:'Intervalo < 15s — risco alto de bloqueio'});}
-  else if(dmin<30){score+=15;tips.push({t:'warn',m:'Intervalo < 30s — risco moderado'});}
-  else tips.push({t:'ok',m:'Intervalo seguro ('+dmin+'s) ✓ — baixo risco de bloqueio'});
+  if(dmin<5){score+=30;tips.push({t:'bad',m:'Intervalo < 5s — risco alto de bloqueio'});}
+  else if(dmin<8){score+=15;tips.push({t:'warn',m:'Intervalo < 8s — risco moderado'});}
+  else tips.push({t:'ok',m:'Intervalo adequado ('+dmin+'s) ✓'});
   if(batch>50){score+=25;tips.push({t:'warn',m:'Lote > 50 — considere ≤ 30'});}
   else if(batch>30){score+=10;tips.push({t:'warn',m:'Lote de '+batch+' — considere ≤ 30'});}
   else tips.push({t:'ok',m:'Tamanho de lote seguro ('+batch+') ✓'});
@@ -658,13 +662,17 @@ async function iniciarDisparo() {
 
     const config={
       slotId,
-      delay_min_s:  parseInt(document.getElementById('delayMin').value)||61,
-      delay_max_s:  parseInt(document.getElementById('delayMax').value)||78,
+      delay_min_s:  parseInt(document.getElementById('delayMin').value)||10,
+      delay_max_s:  parseInt(document.getElementById('delayMax').value)||20,
       batch_size:   parseInt(document.getElementById('batchSize').value)||25,
       batch_pause_s:parseInt(document.getElementById('batchPause').value)||180,
       daily_limit:  parseInt(document.getElementById('dailyLimit').value)||150,
     };
     addLog(`⚙ Slot ${slotId} | ${config.delay_min_s}–${config.delay_max_s}s | lote:${config.batch_size} | pausa:${config.batch_pause_s}s | diário:${config.daily_limit}`,'info');
+
+    // Confirma status atual do slot antes de iniciar
+    await carregarSlots();
+    if(!slotsData[slotId]?.conectado){ addLog(`❌ Slot ${slotId} perdeu a conexão. Reconecte e tente novamente.`,'err'); return; }
 
     await req('/api/campanha/'+campanhaId+'/iniciar',{method:'POST',body:JSON.stringify(config)});
     addLog(`🚀 Disparo iniciado no Slot ${slotId}${slot.numero?' (+'+slot.numero+')':''}!`,'ok');
