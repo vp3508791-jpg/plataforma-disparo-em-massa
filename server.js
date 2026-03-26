@@ -347,7 +347,7 @@ app.post('/api/campanha/criar', upload.single('planilha'), async (req, res) => {
 
     for (let i = 0; i < rows.length; i += 500) {
       const chunk = rows.slice(i, i+500).map(row => {
-        const numero   = String(row[colNum] || '').trim();
+        const numero   = limparNumero(String(row[colNum] || '').trim());
         const nomeLead = colNom >= 0 ? String(row[colNom] || '').trim() : '';
         const dados    = {};
         headers.forEach((h, idx) => { if (h) dados[h] = row[idx] || ''; });
