@@ -237,7 +237,8 @@ async function rodarDisparo(slotId, campanhaId, config = {}) {
       }
 
       try {
-        await slot.sock.sendMessage(numero + '@s.whatsapp.net', { text: variarMensagem(lead.mensagem_final || '') });
+        const msgResult = await slot.sock.sendMessage(numero + '@s.whatsapp.net', { text: variarMensagem(lead.mensagem_final || '') });
+        if (!msgResult?.key?.id) throw new Error('sendMessage sem confirmação do servidor');
         await supabase.from('leads').update({
           status: 'enviado',
           enviado_em: new Date().toISOString(),
@@ -247,7 +248,7 @@ async function rodarDisparo(slotId, campanhaId, config = {}) {
 
         batchCount++;
         dailyCount++;
-        console.log(`✓ Slot ${slotId} | ${numero} | lote:${batchCount} | hoje:${dailyCount}`);
+        console.log(`✓ Slot ${slotId} | ${numero} | lote:${batchCount} | hoje:${dailyCount} | id:${msgResult.key.id}`);
 
         if (batchCount % BATCH_SIZE === 0) {
           console.log(`⏳ Slot ${slotId}: pausa de lote (${BATCH_PAUSE_MS/1000}s)`);
