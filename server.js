@@ -391,10 +391,11 @@ app.get('/api/campanha/:id/feed', async (req, res) => {
   const { count: pendentes } = await supabase.from('leads').select('*',{count:'exact',head:true}).eq('campanha_id',req.params.id).eq('status','pendente');
   const { count: enviados  } = await supabase.from('leads').select('*',{count:'exact',head:true}).eq('campanha_id',req.params.id).eq('status','enviado');
   const { count: erros     } = await supabase.from('leads').select('*',{count:'exact',head:true}).eq('campanha_id',req.params.id).eq('status','erro');
-  const { data: camp }       = await supabase.from('campanhas').select('total_leads,status,slot_id').eq('id',req.params.id).single();
+  const { count: total     } = await supabase.from('leads').select('*',{count:'exact',head:true}).eq('campanha_id',req.params.id);
+  const { data: camp }       = await supabase.from('campanhas').select('status,slot_id').eq('id',req.params.id).single();
   res.json({
     recentes: recentes || [],
-    contadores: { pendentes, enviados, erros, total: camp?.total_leads || 0 },
+    contadores: { pendentes, enviados, erros, total: total || 0 },
     status: camp?.status || 'desconhecido',
     slot_id: camp?.slot_id,
     disparando: Object.values(slots).some(s => s.campanhaAtiva === req.params.id)
