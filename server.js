@@ -154,13 +154,19 @@ async function conectarSlot(slotId) {
       });
 
       if (deveReconectar) {
-        console.log(`🔄 Slot ${slotId}: reconectando em 5s...`);
-        setTimeout(() => conectarSlot(slotId), 5000);
+        const { data: sessao } = await supabase.from('wa_sessao').select('auth_files').eq('id', `slot_${slotId}`).single();
+        if (sessao?.auth_files) {
+          console.log(`🔄 Slot ${slotId}: reconectando em 5s...`);
+          setTimeout(() => conectarSlot(slotId), 5000);
+        } else {
+          console.log(`⏸ Slot ${slotId}: sem sessão salva, aguardando QR scan...`);
+          setTimeout(() => conectarSlot(slotId), 30000);
+        }
       } else {
         fs.rmSync(authDir, { recursive: true, force: true });
         await supabase.from('wa_sessao').upsert({ id: `slot_${slotId}`, auth_files: null, atualizado_em: new Date().toISOString() });
         console.log(`🗑 Slot ${slotId}: sessão removida`);
-        setTimeout(() => conectarSlot(slotId), 2000);
+        setTimeout(() => conectarSlot(slotId), 30000);
       }
     }
 
