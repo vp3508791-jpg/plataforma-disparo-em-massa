@@ -73,16 +73,43 @@ for (let i = 1; i <= MAX_SLOTS; i++) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// ── Backup/restore da sessão no Supabase ──────
+async function restaurarSessao(slotId, authDir) {
+  try {
+    const { data } = await supabase.from('wa_sessao').select('auth_files').eq('id', `slot_${slotId}`).single();
+    if (data?.auth_files && Object.keys(data.auth_files).length > 0) {
+      if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
+      for (const [nome, conteudo] of Object.entries(data.auth_files)) {
+        fs.writeFileSync(path.join(authDir, nome), conteudo);
+      }
+      console.log(`♻️ Slot ${slotId}: sessão restaurada do Supabase`);
+    }
+  } catch (e) { console.error(`Erro ao restaurar slot ${slotId}:`, e.message); }
+}
+
+async function backupSessao(slotId, authDir) {
+  try {
+    if (!fs.existsSync(authDir)) return;
+    const files = {};
+    for (const nome of fs.readdirSync(authDir)) {
+      files[nome] = fs.readFileSync(path.join(authDir, nome), 'utf-8');
+    }
+    await supabase.from('wa_sessao').upsert({ id: `slot_${slotId}`, auth_files: files, atualizado_em: new Date().toISOString() });
+  } catch (e) { console.error(`Erro ao salvar sessão slot ${slotId}:`, e.message); }
+}
+
 // ── Conectar um slot específico ───────────────
 async function conectarSlot(slotId) {
   const slot = slots[slotId];
   if (!slot) throw new Error('Slot inválido');
 
-  const baseDir = process.env.RAILWAY_ENVIRONMENT ? '/tmp' : __dirname;
-  const authDir = path.join(baseDir, `wa_auth_slot${slotId}`);
+  const authDir = path.join('/tmp', `wa_auth_slot${slotId}`);
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
 
+  await restaurarSessao(slotId, authDir);
+
   const { state, saveCreds } = await useMultiFileAuthState(authDir);
+  const saveCredsAndBackup = async () => { await saveCreds(); await backupSessao(slotId, authDir); };
   const { version }          = await fetchLatestBaileysVersion();
 
   slot.sock = makeWASocket({
@@ -95,7 +122,7 @@ async function conectarSlot(slotId) {
     getMessage: async () => ({ conversation: '' }),
   });
 
-  slot.sock.ev.on('creds.update', saveCreds);
+  slot.sock.ev.on('creds.update', saveCredsAndBackup);
 
   slot.sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -131,6 +158,7 @@ async function conectarSlot(slotId) {
         setTimeout(() => conectarSlot(slotId), 5000);
       } else {
         fs.rmSync(authDir, { recursive: true, force: true });
+        await supabase.from('wa_sessao').upsert({ id: `slot_${slotId}`, auth_files: null, atualizado_em: new Date().toISOString() });
         console.log(`🗑 Slot ${slotId}: sessão removida`);
         setTimeout(() => conectarSlot(slotId), 2000);
       }
