@@ -188,8 +188,10 @@ async function conectarSlot(slotId) {
 
 // ── Motor de disparo por slot ─────────────────
 function randomDelay(config = {}) {
-  const min = (config.delay_min_s || 10) * 1000;
-  const max = (config.delay_max_s || 20) * 1000;
+  const a = (config.delay_min_s || 10) * 1000;
+  const b = (config.delay_max_s || 20) * 1000;
+  const min = Math.min(a, b);
+  const max = Math.max(a, b);
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
@@ -297,6 +299,7 @@ async function rodarDisparo(slotId, campanhaId, config = {}) {
           tentativas: (lead.tentativas || 0) + 1
         }).eq('id', lead.id);
         await supabase.rpc('increment_erros', { camp_id: campanhaId });
+        await sleep(randomDelay(config));
       }
     }
   } finally {
